@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HITSTER QUIZ</title>
+<script>
+// ── CALLBACK MODE ─────────────────────────────────────────
+// Om denna sida öppnas som Spotify-callback (popup),
+// skickar den koden till föräldrafönstret och stänger sig.
+(function(){
+  const p = new URLSearchParams(window.location.search);
+  const code = p.get('code');
+  const state = p.get('state');
+  const error = p.get('error');
+  if(code || error){
+    if(window.opener){
+      window.opener.postMessage({ spotifyCode: code, state, error }, '*');
+    }
+    window.close();
+    // Fallback om popup inte stängs
+    document.addEventListener('DOMContentLoaded', ()=>{
+      document.body.innerHTML = '<div style="font-family:sans-serif;text-align:center;padding:40px;background:#111;color:#1DB954;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column"><p style="font-size:18px">✅ Inloggad!</p><p style="color:#888;font-size:13px;margin-top:10px">Du kan stänga det här fönstret.</p></div>';
+    });
+  }
+})();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --yellow:#FFE600; --pink:#FF2D78; --blue:#00E5FF;
+    --green:#1DB954; --black:#0A0A0A; --card:#141414; --gray:#2A2A2A;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--black);color:#fff;font-family:'Space Mono',monospace;min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);pointer-events:none;z-index:9999;}
+
+  .header{text-align:center;padding:24px 20px 6px;}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:clamp(54px,13vw,105px);letter-spacing:8px;color:var(--yellow);text-shadow:4px 4px 0 var(--pink),8px 8px 0 rgba(255,45,120,.25);line-height:1;animation:glitch 8s infinite;}
+  @keyframes glitch{0%,93%,100%{transform:translate(0);color:var(--yellow)}94%{transform:translate(-3px,1px);color:var(--blue)}95%{transform:translate(3px,-1px);color:var(--pink)}96%{transform:translate(0)}}
+  .tagline{font-size:10px;letter-spacing:4px;color:#555;text-transform:uppercase;margin-top:2px;}
+
+  .wrap{max-width:640px;margin:0 auto;padding:0 16px 60px;}
+
+  /* LOGIN */
+  #loginScreen{text-align:center;padding:30px 16px;}
+  .login-box{background:var(--card);border:1px solid var(--gray);border-radius:6px;padding:32px 24px;max-width:400px;margin:0 auto;}
+  .login-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:4px;margin-bottom:10px;}
+  .login-desc{font-size:11px;color:#777;line-height:1.9;letter-spacing:.5px;margin-bottom:24px;}
+  .spotify-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:15px 20px;background:var(--green);border:none;border-radius:50px;color:#000;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:2px;font-weight:700;text-transform:uppercase;cursor:pointer;transition:all .18s;}
+  .spotify-btn:hover{background:#22e065;transform:translateY(-1px);box-shadow:0 6px 20px rgba(29,185,84,.3);}
+  .spotify-btn:disabled{background:#2a5a3a;cursor:wait;}
+  .spotify-btn svg{width:20px;height:20px;fill:#000;flex-shrink:0;}
+  .login-note{font-size:9px;color:#444;letter-spacing:1px;margin-top:14px;line-height:1.8;}
+  .login-err{color:#ff6666;font-size:11px;margin-top:12px;letter-spacing:.5px;display:none;}
+
+  /* USER BAR */
+  .user-bar{display:none;align-items:center;justify-content:space-between;padding:8px 16px;background:#0d150d;border-bottom:1px solid #1a2a1a;font-size:10px;color:var(--green);letter-spacing:1px;}
+  .user-bar.show{display:flex;}
+  .user-bar img{width:22px;height:22px;border-radius:50%;}
+  .logout-btn{color:#444;cursor:pointer;font-size:9px;letter-spacing:2px;background:none;border:none;font-family:'Space Mono',monospace;text-transform:uppercase;}
+  .logout-btn:hover{color:#ff4444;}
+
+  /* SCORE */
+  .score-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;background:var(--card);border-top:1px solid var(--gray);border-bottom:1px solid var(--gray);margin-bottom:12px;}
+  .sc-label{font-size:9px;letter-spacing:3px;color:#444;text-transform:uppercase;}
+  .sc-val{font-family:'Bebas Neue',sans-serif;font-size:30px;color:var(--yellow);line-height:1;}
+  .progress-bar{height:3px;background:var(--gray);margin:0 20px 16px;border-radius:2px;overflow:hidden;}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--pink),var(--yellow));transition:width .5s ease;}
+
+  /* CARD */
+  .qcard{background:var(--card);border:1px solid var(--gray);border-radius:4px;padding:22px;margin-bottom:14px;position:relative;overflow:hidden;}
+  .qcard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--pink),var(--yellow),var(--blue));}
+  .decade-tag{display:inline-block;font-size:10px;letter-spacing:3px;padding:3px 9px;border:1px solid var(--pink);color:var(--pink);text-transform:uppercase;margin-bottom:10px;}
+  .q-num{font-size:9px;letter-spacing:3px;color:#3a3a3a;text-transform:uppercase;margin-bottom:5px;}
+  .q-text{font-size:15px;line-height:1.65;color:#ddd;margin-bottom:18px;}
+
+  /* PLAYER */
+  .sp-player{background:#0a0f0a;border:2px solid #1a3a1a;border-radius:6px;padding:15px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;transition:border-color .2s,box-shadow .2s;}
+  .sp-player.playing{border-color:var(--green);box-shadow:0 0 18px rgba(29,185,84,.12);}
+  .sp-player.error{border-color:#2a2a2a;opacity:.5;}
+  .sp-play-btn{width:46px;height:46px;border-radius:50%;background:var(--green);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s,background .2s;box-shadow:0 2px 10px rgba(29,185,84,.25);}
+  .sp-play-btn:hover:not(:disabled){transform:scale(1.08);background:#22e065;}
+  .sp-play-btn:disabled{background:#222;cursor:default;box-shadow:none;}
+  .sp-play-btn svg{fill:#000;width:16px;height:16px;margin-left:2px;}
+  .sp-play-btn.pausing svg{margin-left:0;}
+  .sp-mid{flex:1;min-width:0;}
+  .sp-status{font-size:10px;letter-spacing:2px;color:#1DB954;text-transform:uppercase;margin-bottom:7px;}
+  .sp-status.idle{color:#3a3a3a;}
+  .sp-status.error{color:#555;}
+  .sp-bar{width:100%;height:4px;background:#1a2a1a;border-radius:2px;overflow:hidden;cursor:pointer;}
+  .sp-fill{height:100%;background:linear-gradient(90deg,var(--green),#22e065);width:0%;transition:width .25s linear;border-radius:2px;}
+  .sp-wave{display:flex;align-items:center;gap:3px;height:24px;flex-shrink:0;}
+  .sw{width:3px;border-radius:2px;background:var(--green);opacity:.2;}
+  .playing .sw{opacity:1;animation:wav .6s ease-in-out infinite;}
+  .sw:nth-child(1){height:6px;animation-delay:0s}.sw:nth-child(2){height:14px;animation-delay:.08s}.sw:nth-child(3){height:24px;animation-delay:.16s}.sw:nth-child(4){height:11px;animation-delay:.12s}.sw:nth-child(5){height:18px;animation-delay:.04s}.sw:nth-child(6){height:8px;animation-delay:.2s}.sw:nth-child(7){height:16px;animation-delay:.1s}
+  @keyframes wav{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+  .sp-time{font-size:11px;color:#2a4a2a;letter-spacing:1px;flex-shrink:0;min-width:28px;text-align:right;font-variant-numeric:tabular-nums;}
+
+  /* REVEAL */
+  .song-reveal{display:none;background:#0d150d;border:1px solid #1a3a1a;border-radius:4px;padding:11px 14px;margin-top:10px;}
+  .song-reveal.show{display:block;animation:up .2s ease;}
+  .sr-label{font-size:9px;letter-spacing:2px;color:var(--green);text-transform:uppercase;margin-bottom:5px;}
+  .sr-title{font-size:14px;color:#fff;margin-bottom:2px;}
+  .sr-artist{font-size:11px;color:#888;}
+
+  /* OPTIONS */
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px;}
+  .opt{background:#0d0d0d;border:1px solid var(--gray);color:#bbb;padding:13px 13px;text-align:left;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;line-height:1.5;transition:all .13s;border-radius:3px;}
+  .opt:hover:not(:disabled){border-color:var(--yellow);color:#fff;background:#131300;}
+  .opt.correct{border-color:#00FF88;background:rgba(0,255,136,.07);color:#00FF88;animation:pop .22s ease;}
+  .opt.wrong{border-color:var(--pink);background:rgba(255,45,120,.07);color:var(--pink);}
+  .opt:disabled{cursor:default;}
+  @keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.022)}100%{transform:scale(1)}}
+  .ol{display:inline-block;width:17px;height:17px;background:#1e1e1e;text-align:center;line-height:17px;font-size:9px;margin-right:7px;border-radius:2px;}
+
+  .hint-btn{font-size:10px;letter-spacing:2px;color:#3a3a3a;background:none;border:1px solid #1e1e1e;padding:5px 10px;cursor:pointer;font-family:'Space Mono',monospace;text-transform:uppercase;transition:all .18s;border-radius:2px;margin-bottom:12px;}
+  .hint-btn:hover{color:var(--blue);border-color:var(--blue);}
+  .hint-btn.used{color:#c07000;border-color:#c07000;}
+
+  .fb{padding:12px 15px;border-radius:3px;font-size:12px;margin-bottom:12px;display:none;line-height:1.7;}
+  .fb.show{display:block;animation:up .18s ease;}
+  .fb.ok{background:rgba(0,255,136,.05);border:1px solid #00FF88;color:#00FF88;}
+  .fb.no{background:rgba(255,45,120,.05);border:1px solid var(--pink);color:#ffb0c8;}
+  @keyframes up{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+
+  .next-btn{width:100%;background:var(--yellow);color:#000;border:none;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:4px;cursor:pointer;transition:all .13s;display:none;border-radius:3px;}
+  .next-btn:hover{background:#fff;transform:translateY(-1px);}
+  .next-btn.show{display:block;animation:up .18s ease;}
+
+  /* INTRO */
+  .intro{text-align:center;padding:14px 8px;}
+  .intro.hidden,.hidden{display:none!important;}
+  .intro-desc{font-size:11px;color:#666;line-height:2;letter-spacing:1px;max-width:400px;margin:0 auto 22px;}
+  .decade-filters{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-bottom:22px;}
+  .dtag{font-size:11px;letter-spacing:2px;padding:5px 12px;border:1px solid var(--gray);color:#555;background:none;cursor:pointer;font-family:'Space Mono',monospace;transition:all .13s;border-radius:2px;}
+  .dtag.active{border-color:var(--yellow);color:var(--yellow);background:rgba(255,230,0,.04);}
+  .start-btn{background:var(--pink);color:#fff;border:none;font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:6px;padding:15px 52px;cursor:pointer;transition:all .18s;border-radius:3px;}
+  .start-btn:hover{background:#fff;color:var(--pink);transform:translateY(-2px);}
+
+  /* END */
+  .end{display:none;text-align:center;padding:36px 16px;}
+  .end.show{display:block;animation:up .4s ease;}
+  .end-title{font-family:'Bebas Neue',sans-serif;font-size:72px;color:var(--yellow);text-shadow:4px 4px 0 var(--pink);line-height:1;margin-bottom:8px;}
+  .end-sub{font-size:12px;color:#777;letter-spacing:3px;margin-bottom:24px;}
+  .rank{display:inline-block;font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:4px;padding:10px 24px;border:2px solid var(--pink);color:var(--pink);margin-bottom:24px;animation:rpulse 2s infinite;}
+  @keyframes rpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,45,120,0)}50%{box-shadow:0 0 16px 3px rgba(255,45,120,.22)}}
+  .restart-btn{background:none;border:2px solid var(--yellow);color:var(--yellow);font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:4px;padding:12px 36px;cursor:pointer;transition:all .18s;border-radius:3px;}
+  .restart-btn:hover{background:var(--yellow);color:#000;}
+  .quiz-area{display:none;}
+  .quiz-area.show{display:block;}
+  .cp{position:fixed;width:8px;height:8px;pointer-events:none;z-index:10000;animation:fall 1.4s ease-in forwards;}
+  @keyframes fall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(88vh) rotate(720deg);opacity:0}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">HITSTER</div>
+  <div class="tagline">Musikquiz — 80-tal till nutid</div>
+</div>
+
+<!-- USER BAR -->
+<div class="user-bar" id="userBar">
+  <div style="display:flex;align-items:center;gap:8px">
+    <img id="userAvatar" src="" alt="" style="display:none">
+    <span id="userName"></span>
+  </div>
+  <button class="logout-btn" onclick="logout()">Logga ut</button>
+</div>
+
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="loginScreen">
+    <div class="login-box">
+      <div class="login-title">LOGGA IN</div>
+      <p class="login-desc">
+        Logga in med Spotify för att lyssna på låtarna direkt i quizet.<br>
+        Artist och titel döljs tills du svarat!
+      </p>
+      <button class="spotify-btn" id="loginBtn" onclick="loginWithSpotify()">
+        <svg viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        Logga in med Spotify
+      </button>
+      <p class="login-note">Kräver Spotify-konto · Gratis eller Premium</p>
+      <p class="login-err" id="loginErr"></p>
+    </div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="intro hidden" id="intro">
+    <p class="intro-desc">30 sek Spotify-förhandsvisning per fråga.<br>Artist och titel döljs tills du svarat!</p>
+    <div class="decade-filters">
+      <button class="dtag active" data-d="all">Alla</button>
+      <button class="dtag" data-d="80s">80-tal</button>
+      <button class="dtag" data-d="90s">90-tal</button>
+      <button class="dtag" data-d="00s">00-tal</button>
+      <button class="dtag" data-d="10s">10-tal</button>
+      <button class="dtag" data-d="20s">20-tal</button>
+    </div>
+    <button class="start-btn" id="startBtn">SPELA NU</button>
+  </div>
+
+  <!-- QUIZ -->
+  <div class="quiz-area" id="quizArea">
+    <div class="score-bar">
+      <div><div class="sc-label">Poäng</div><div class="sc-val" id="scoreDisplay">0</div></div>
+      <div style="text-align:center"><div class="sc-label">Fråga</div><div class="sc-val" id="qCounter">1/10</div></div>
+      <div style="text-align:right"><div class="sc-label">Streak 🔥</div><div class="sc-val" id="streakDisplay">0</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+    <div class="qcard">
+      <div class="decade-tag" id="decadeBadge"></div>
+      <div class="q-num" id="qNum"></div>
+      <div class="q-text" id="qText"></div>
+
+      <div class="sp-player" id="spPlayer">
+        <button class="sp-play-btn" id="spPlayBtn" onclick="togglePlay()" disabled>
+          <svg id="spIcon" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+        </button>
+        <div class="sp-mid">
+          <div class="sp-status idle" id="spStatus">LADDAR...</div>
+          <div class="sp-bar" onclick="seekAudio(event)"><div class="sp-fill" id="spFill"></div></div>
+        </div>
+        <div class="sp-wave" id="spWave">
+          <div class="sw"></div><div class="sw"></div><div class="sw"></div>
+          <div class="sw"></div><div class="sw"></div><div class="sw"></div><div class="sw"></div>
+        </div>
+        <div class="sp-time" id="spTime">0:30</div>
+      </div>
+
+      <div class="song-reveal" id="songReveal">
+        <div class="sr-label">🎵 LÅTEN VAR</div>
+        <div class="sr-title" id="revealTitle"></div>
+        <div class="sr-artist" id="revealArtist"></div>
+      </div>
+
+      <button class="hint-btn" id="hintBtn" onclick="showHint()">📅 VISA ÅRTIPS (−1 poäng)</button>
+      <div class="opts" id="optsGrid"></div>
+      <div class="fb" id="feedback"></div>
+      <button class="next-btn" id="nextBtn" onclick="nextQ()">NÄSTA FRÅGA →</button>
+    </div>
+  </div>
+
+  <!-- END -->
+  <div class="end" id="endScreen">
+    <div class="end-title">GRATTIS!</div>
+    <div class="end-sub" id="endSub"></div>
+    <div class="rank" id="rankBadge"></div>
+    <br><br>
+    <button class="restart-btn" onclick="restart()">SPELA IGEN</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  SPOTIFY CLIENT ID — redan ifyllt
+// ══════════════════════════════════════════════════════════
+const CLIENT_ID = 'afb40bb70d9b412ab09b34f9b1d0bcfa';
+const SCOPES    = 'user-read-email user-read-private';
+
+// Redirect URI = SAMMA fil (self-referential)
+// Filen fungerar som sin egen callback-sida!
+function getRedirectURI(){
+  // Returnerar filens URL utan query/hash
+  return window.location.href.split('?')[0].split('#')[0];
+}
+
+// ── PKCE ──────────────────────────────────────────────────
+async function pkceChallenge(){
+  const arr = new Uint8Array(64);
+  crypto.getRandomValues(arr);
+  const verifier = btoa(String.fromCharCode(...arr))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return { verifier, challenge };
+}
+
+// ── AUTH ──────────────────────────────────────────────────
+let accessToken = null;
+
+async function loginWithSpotify(){
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = 'Öppnar Spotify...';
+
+  const { verifier, challenge } = await pkceChallenge();
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem('pkce_v', verifier);
+  sessionStorage.setItem('sp_state', state);
+
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: getRedirectURI(),
+    scope: SCOPES,
+    state,
+    code_challenge_method: 'S256',
+    code_challenge: challenge
+  });
+
+  // Öppna Spotify-login i popup
+  const w=480, h=660;
+  const left = Math.round(screen.width/2 - w/2);
+  const top  = Math.round(screen.height/2 - h/2);
+  const popup = window.open(
+    `https://accounts.spotify.com/authorize?${params}`,
+    'SpotifyAuth',
+    `width=${w},height=${h},left=${left},top=${top},scrollbars=yes`
+  );
+
+  if(!popup){
+    // Popup blockades — fall back till redirect
+    window.location = `https://accounts.spotify.com/authorize?${params}`;
+    return;
+  }
+
+  // Vänta på att popup navigerar tillbaka till samma fil
+  // och skickar ?code= — vi pollar popup-URL:en
+  const timer = setInterval(async ()=>{
+    try {
+      if(popup.closed){
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" style="fill:#000;flex-shrink:0"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>Logga in med Spotify';
+        return;
+      }
+      // Försök läsa URL — fungerar när popup är på samma origin
+      const url = popup.location.href;
+      const p = new URLSearchParams(popup.location.search);
+      const code = p.get('code');
+      const retState = p.get('state');
+      if(code){
+        clearInterval(timer);
+        popup.close();
+        if(retState !== sessionStorage.getItem('sp_state')){
+          showErr('Ogiltig state — försök igen.'); return;
+        }
+        await exchangeCode(code);
+      }
+    } catch(e){
+      // Cross-origin ännu (Spotify-sidan) — ignorera
+    }
+  }, 500);
+}
+
+async function exchangeCode(code){
+  const verifier = sessionStorage.getItem('pkce_v');
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: getRedirectURI(),
+    client_id: CLIENT_ID,
+    code_verifier: verifier
+  });
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body
+  });
+  if(!res.ok){ showErr('Inloggning misslyckades — försök igen.'); return; }
+  const data = await res.json();
+  accessToken = data.access_token;
+  sessionStorage.setItem('sp_token', accessToken);
+  await afterLogin();
+}
+
+// Redirect-fall: om vi laddas med ?code= i URL:en
+async function checkRedirectCallback(){
+  const p = new URLSearchParams(window.location.search);
+  const code = p.get('code');
+  const state = p.get('state');
+  if(!code) return false;
+  history.replaceState(null, '', window.location.pathname);
+  if(state !== sessionStorage.getItem('sp_state')) return false;
+  await exchangeCode(code);
+  return true;
+}
+
+function checkStoredToken(){
+  const t = sessionStorage.getItem('sp_token');
+  if(t){ accessToken=t; return true; }
+  return false;
+}
+
+async function afterLogin(){
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me',{
+      headers:{Authorization:`Bearer ${accessToken}`}
+    });
+    if(!res.ok) throw new Error();
+    const user = await res.json();
+    document.getElementById('userName').textContent = user.display_name || user.id;
+    if(user.images && user.images[0]){
+      const av = document.getElementById('userAvatar');
+      av.src = user.images[0].url;
+      av.style.display = 'block';
+    }
+    document.getElementById('userBar').classList.add('show');
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('intro').classList.remove('hidden');
+  } catch(e){
+    sessionStorage.removeItem('sp_token');
+    showErr('Token ogiltig — försök logga in igen.');
+  }
+}
+
+function showErr(msg){
+  const el = document.getElementById('loginErr');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+  const btn = document.getElementById('loginBtn');
+  btn.disabled=false;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" style="fill:#000;flex-shrink:0"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>Logga in med Spotify';
+}
+
+function logout(){
+  accessToken=null;
+  ['sp_token','sp_state','pkce_v'].forEach(k=>sessionStorage.removeItem(k));
+  location.reload();
+}
+
+// ── PREVIEW ───────────────────────────────────────────────
+async function getPreview(trackId){
+  const res = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`,{
+    headers:{Authorization:`Bearer ${accessToken}`}
+  });
+  if(!res.ok) return null;
+  const d = await res.json();
+  return d.preview_url||null;
+}
+
+// ── AUDIO ─────────────────────────────────────────────────
+let audio=null, previewUrl=null;
+
+function stopAudio(){ if(audio){audio.pause();audio=null;} }
+
+function setPlayer(state){
+  const p=document.getElementById('spPlayer');
+  const btn=document.getElementById('spPlayBtn');
+  const icon=document.getElementById('spIcon');
+  const st=document.getElementById('spStatus');
+  const wv=document.getElementById('spWave');
+  p.className='sp-player'; wv.className='sp-wave'; btn.className='sp-play-btn';
+  if(state==='loading'){ btn.disabled=true; st.className='sp-status idle'; st.textContent='LADDAR...'; icon.innerHTML='<polygon points="5,3 19,12 5,21"/>'; }
+  else if(state==='ready'){ btn.disabled=false; st.className='sp-status idle'; st.textContent='MUSIKLEDTRÅD — TRYCK PLAY'; icon.innerHTML='<polygon points="5,3 19,12 5,21"/>'; }
+  else if(state==='playing'){ btn.disabled=false; p.className='sp-player playing'; wv.className='sp-wave playing'; btn.className='sp-play-btn pausing'; st.className='sp-status'; st.textContent='SPELAR — LYSSNA NOGA 🎵'; icon.innerHTML='<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'; }
+  else if(state==='error'){ btn.disabled=true; p.className='sp-player error'; st.className='sp-status error'; st.textContent='FÖRHANDSVISNING EJ TILLGÄNGLIG'; }
+}
+
+function togglePlay(){
+  if(!previewUrl) return;
+  if(audio&&!audio.paused){ audio.pause(); setPlayer('ready'); return; }
+  if(audio){audio.pause();audio=null;}
+  audio=new Audio(previewUrl);
+  audio.addEventListener('timeupdate',()=>{
+    const pct=(audio.currentTime/audio.duration)*100||0;
+    document.getElementById('spFill').style.width=pct+'%';
+    const rem=Math.ceil((audio.duration||30)-audio.currentTime);
+    document.getElementById('spTime').textContent=`0:${String(rem%60).padStart(2,'0')}`;
+  });
+  audio.addEventListener('ended',()=>{ setPlayer('ready'); document.getElementById('spFill').style.width='100%'; document.getElementById('spTime').textContent='0:00'; });
+  audio.addEventListener('error',()=>setPlayer('error'));
+  audio.play().then(()=>setPlayer('playing')).catch(()=>setPlayer('error'));
+}
+
+function seekAudio(e){
+  if(!audio) return;
+  audio.currentTime=(e.offsetX/e.currentTarget.offsetWidth)*(audio.duration||30);
+}
+
+// ── QUESTIONS ─────────────────────────────────────────────
+const DB=[
+  {d:"80-TAL",y:1982,id:"5ChkMS8OtdzJeqyybCc9R4",title:"Billie Jean",artist:"Michael Jackson",
+   q:"En dansant megahit om en kvinna som påstår att han är far till hennes barn. Vem?",
+   opts:["Prince","Michael Jackson","George Michael","David Bowie"],c:1,
+   fun:"Billie Jean (1982) — första musikvideon av en svart artist i tung MTV-rotation. Thriller är det bästsäljande albumet i historien."},
+  {d:"80-TAL",y:1984,id:"3MbGMYX5J5Q8eLflkrKKZr",title:"Like a Virgin",artist:"Madonna",
+   q:"En popikon framförde denna låt i bröllopsklänning på MTV Awards 1984. Vilken låt?",
+   opts:["Material Girl","Holiday","Like a Virgin","Papa Don't Preach"],c:2,
+   fun:"Like a Virgin (1984) — Madonnas MTV-klänning såldes på auktion för över 250 000 dollar."},
+  {d:"80-TAL",y:1985,id:"7tFiyTwD0nx5a1eklYtX2J",title:"Bohemian Rhapsody",artist:"Queen",
+   q:"Denna brittiska rockgrupp höll vad som kallas historiens bästa liveframträdande på Live Aid 1985. Vilka?",
+   opts:["Led Zeppelin","The Rolling Stones","Queen","Pink Floyd"],c:2,
+   fun:"Bohemian Rhapsody — Queens set på Live Aid 1985 omröstades till det bästa liveframträdandet i historien."},
+  {d:"80-TAL",y:1987,id:"6ADSFVNxfcRgCzwBfqGlGs",title:"With or Without You",artist:"U2",
+   q:"U2:s allra första #1-singel i USA kom 1987. Vilken låt?",
+   opts:["Sunday Bloody Sunday","One","Beautiful Day","With or Without You"],c:3,
+   fun:"With or Without You (1987) — The Joshua Tree vann Grammy för Årets album 1988."},
+  {d:"80-TAL",y:1983,id:"1C5NapXCiPrVGTKJxVXFz1",title:"Every Breath You Take",artist:"The Police",
+   q:"En brittisk grupps 1983-hit låter romantisk men handlar egentligen om besatthet. Vilken?",
+   opts:["Every Breath You Take – The Police","Don't You Want Me – Human League","Tainted Love – Soft Cell","Girls Just Want to Have Fun – Cyndi Lauper"],c:0,
+   fun:"Every Breath You Take (1983) — verkar romantisk men handlar om kontroll och besatthet."},
+  {d:"80-TAL",y:1988,id:"3JIxjvbbDrA9ztYlNcp3yL",title:"Fast Car",artist:"Tracy Chapman",
+   q:"Vilken artist slog igenom 1988 med en akustisk folkpop-låt som fick viral renässans 35 år senare?",
+   opts:["Tina Turner","Joan Jett","Tracy Chapman","Bonnie Tyler"],c:2,
+   fun:"Fast Car (1988) — Luke Combs cover från 2023 skickade originalet tillbaka upp på listorna."},
+  {d:"90-TAL",y:1991,id:"5ghIJDpPoe3CfHMGu71E6T",title:"Smells Like Teen Spirit",artist:"Nirvana",
+   q:"En grunge-trio från Seattle förändrade rockmusiken 1991. Vilken låt?",
+   opts:["Even Flow","Black Hole Sun","Smells Like Teen Spirit","Would?"],c:2,
+   fun:"Smells Like Teen Spirit (1991) — Nevermind sålde slut så snabbt att skivbolaget inte hann trycka nog."},
+  {d:"90-TAL",y:1996,id:"1Je1IMUlBXcx1Fz0WE7oPT",title:"Wannabe",artist:"Spice Girls",
+   q:"Debutsingeln som nådde #1 i 37 länder 1996. Vilket band?",
+   opts:["*NSYNC","Destiny's Child","Spice Girls","TLC"],c:2,
+   fun:"Wannabe (1996) — en av de mest sålda debutsinglarna i historien."},
+  {d:"90-TAL",y:1997,id:"3NG4BS5Pge8eFJSmE0ZOBY",title:"My Heart Will Go On",artist:"Céline Dion",
+   q:"Den oscarbelönade balladen från Titanics soundtrack 1997. Vem sjöng?",
+   opts:["Whitney Houston","Mariah Carey","Shania Twain","Céline Dion"],c:3,
+   fun:"My Heart Will Go On (1997) — sjöngs in på en enda motvillig tagning. Vann Oscar, sålde 15 miljoner."},
+  {d:"90-TAL",y:1995,id:"4Dl9gJ6TrGR6tROJLlNRoL",title:"Show Me Love",artist:"Robyn",
+   q:"Vilken svensk artist var bara 16 år när hennes debut 'Show Me Love' nådde #7 i USA?",
+   opts:["Ace of Base","The Cardigans","Robyn","Roxette"],c:2,
+   fun:"Show Me Love (1995) — Robyn var 16 år vid debuten och är idag en av Sveriges mest hyllade popexporter."},
+  {d:"90-TAL",y:1999,id:"6e40mgJiCeJRTpRMZFpOBl",title:"I Want It That Way",artist:"Backstreet Boys",
+   q:"En boy band-hit från 1999 med textraden 'Tell me why'. Vilket band?",
+   opts:["*NSYNC","Boyz II Men","Backstreet Boys","Take That"],c:2,
+   fun:"I Want It That Way (1999) — textens logik är obegriplig men melodin fastnar omedelbart."},
+  {d:"90-TAL",y:1997,id:"44vExKxwmTpDEZUuJHnQdb",title:"MMMBop",artist:"Hanson",
+   q:"Tre syskon i åldrarna 11–16 hade 1997 en av decenniets mest igenkännliga poplåtar. Vilket band?",
+   opts:["New Kids on the Block","Hanson","LFO","98 Degrees"],c:1,
+   fun:"MMMBop (1997) — bröderna Hanson var 16, 14 och 11 år gamla. Nådde #1 i 27 länder."},
+  {d:"00-TAL",y:2003,id:"0n4bITAu3kJmCRHdCCNjhO",title:"Crazy in Love",artist:"Beyoncé ft. Jay-Z",
+   q:"Beyoncés solokarriär exploderade 2003 med denna R&B-hit. Vilken låt?",
+   opts:["Halo","Single Ladies","Irreplaceable","Crazy in Love"],c:3,
+   fun:"Crazy in Love (2003) — vann Grammy för Bästa R&B-låt 2004."},
+  {d:"00-TAL",y:2006,id:"3I2IvbUhWzRoTZeGpEIMdl",title:"Hips Don't Lie",artist:"Shakira",
+   q:"En latinamerikansk artist nådde #1 i hela världen 2006 med en afro-karibisk danshit. Vem?",
+   opts:["Jennifer Lopez","Rihanna","Beyoncé","Shakira"],c:3,
+   fun:"Hips Don't Lie (2006) — en av de mest sålda singlarna i historien med över 10 miljoner exemplar."},
+  {d:"00-TAL",y:2008,id:"1mea3bSkSGXuIRvnydlB5b",title:"Viva la Vida",artist:"Coldplay",
+   q:"Coldplays Brian Eno-producerade singel som nådde #1 i 36 länder och vann Grammy 2009. Vilken?",
+   opts:["Fix You","The Scientist","Yellow","Viva la Vida"],c:3,
+   fun:"Viva la Vida (2008) — producerades av Brian Eno, sålde 7,5 miljoner på tre månader."},
+  {d:"00-TAL",y:2001,id:"3qT4bUD1MaWpGrTwcvguhb",title:"Fallin'",artist:"Alicia Keys",
+   q:"En 20-årig R&B-artist debuterade 2001 med en pianolåt som vann tre Grammy. Vem?",
+   opts:["Norah Jones","Mary J. Blige","Alicia Keys","Jill Scott"],c:2,
+   fun:"Fallin' (2001) — Alicia Keys var 20 år och debuterade på #1 med 236 000 sålda på en vecka."},
+  {d:"00-TAL",y:2006,id:"7uv632EkfwYhXoqf8rhYrg",title:"Rehab",artist:"Amy Winehouse",
+   q:"En brittisk soulartist vann fem Grammy 2008 och är känd för låten 'Rehab'. Vem?",
+   opts:["Duffy","Paloma Faith","Lily Allen","Amy Winehouse"],c:3,
+   fun:"Rehab (2006) — Amy Winehouse vann fem Grammy 2008, rekord för en brittisk artist."},
+  {d:"10-TAL",y:2010,id:"4b9PKiw8HBzQoQSSRGELQg",title:"Rolling in the Deep",artist:"Adele",
+   q:"En gospel-influerad soulsensation som dominerade listorna 2010–2011. Vem sjunger?",
+   opts:["Duffy","Paloma Faith","Amy Winehouse","Adele"],c:3,
+   fun:"Rolling in the Deep (2010) — Adeles album 21 sålde 31 miljoner exemplar."},
+  {d:"10-TAL",y:2017,id:"7qiZfU4dY1lWllzX7mPBI3",title:"Shape of You",artist:"Ed Sheeran",
+   q:"En tropisk pop-hit som låg #1 i 34 länder under 2017. Vem sjunger?",
+   opts:["Charlie Puth","Justin Bieber","Bruno Mars","Ed Sheeran"],c:3,
+   fun:"Shape of You (2017) — den mest streamade låten på Spotify under hela 2017."},
+  {d:"10-TAL",y:2013,id:"4RvWPyQ5RL0ao9LPZeSouE",title:"Royals",artist:"Lorde",
+   q:"En nyzeeländsk 16-åring chockade musikvärlden 2013 med minimalistiska 'Royals'. Vem?",
+   opts:["Sigrid","Aurora","Lorde","MØ"],c:2,
+   fun:"Royals (2013) — Lorde var 16 år och vann Grammy för Årets låt 2014, yngsta mottagare."},
+  {d:"10-TAL",y:2015,id:"09IStsImwEKb2UcKqkOmFj",title:"Can't Feel My Face",artist:"The Weeknd",
+   q:"En kanadensisk R&B-artist nådde #1 i USA 2015 med en MJ-inspirerad pop-hit. Vem?",
+   opts:["Drake","Frank Ocean","Post Malone","The Weeknd"],c:3,
+   fun:"Can't Feel My Face (2015) — producerades av Max Martin."},
+  {d:"10-TAL",y:2012,id:"3Ofmpyhv5UAQ7CPGMnRBBB",title:"Euphoria",artist:"Loreen",
+   q:"Loreen vann Eurovision 2012 med Euphoria. I vilken stad hölls tävlingen?",
+   opts:["Oslo","Düsseldorf","Baku","Wien"],c:2,
+   fun:"Euphoria (ESC 2012, Baku) — Loreen vann ESC igen 2023, som första kvinna att vinna två gånger."},
+  {d:"10-TAL",y:2016,id:"6rqhFgbbKwnb9MLmUQDhG6",title:"One Dance",artist:"Drake",
+   q:"Vilken kanadensisk artist dominerade 2016 med albumet 'Views' och singeln 'One Dance'?",
+   opts:["The Weeknd","Kendrick Lamar","Drake","Post Malone"],c:2,
+   fun:"One Dance (2016) — den mest streamade låten på Spotify under hela 2016."},
+  {d:"20-TAL",y:2019,id:"2Fxmhks0bxGSBdJ92vM42m",title:"bad guy",artist:"Billie Eilish",
+   q:"Vem vann Grammy för Årets låt 2020 med 'bad guy' vid 18 års ålder?",
+   opts:["Dua Lipa","Olivia Rodrigo","Ariana Grande","Billie Eilish"],c:3,
+   fun:"bad guy (2019) — Billie Eilish vann alla fyra stora Grammy-priser vid 18 år, unikt i historien."},
+  {d:"20-TAL",y:2020,id:"0VjIjW4GlUZAMYd2vXMi3b",title:"Blinding Lights",artist:"The Weeknd",
+   q:"En 80-talsinspirerad synth-hit som låg 90 veckor på Billboard Hot 100 — rekord. Vem?",
+   opts:["Harry Styles","Bruno Mars","Post Malone","The Weeknd"],c:3,
+   fun:"Blinding Lights (2020) — 90 veckor på Billboard Hot 100 är fortfarande ett rekord."},
+  {d:"20-TAL",y:2021,id:"1KSjPkBFYNpFfT6aDw5Mbd",title:"drivers license",artist:"Olivia Rodrigo",
+   q:"En 17-åring bröt streamingrekord 2021 med sin debutsingel. Vem?",
+   opts:["Sabrina Carpenter","Gracie Abrams","Olivia Rodrigo","Conan Gray"],c:2,
+   fun:"drivers license (2021) — 100 miljoner Spotify-streams på fem dagar, rekord för en debutant."},
+  {d:"20-TAL",y:2023,id:"44LMDnp2mIqU5JWKXJ2eGT",title:"Anti-Hero",artist:"Taylor Swift",
+   q:"Vems världsturné 2023 var den första att omsätta över en miljard dollar?",
+   opts:["Beyoncé","Adele","Rihanna","Taylor Swift"],c:3,
+   fun:"Anti-Hero (2023) — The Eras Tour omsatte över en miljard dollar, unikt i musikhistorien."},
+  {d:"20-TAL",y:2021,id:"5nujrmhLynf4yMoMtj8AQF",title:"Levitating",artist:"Dua Lipa",
+   q:"Vilken brittisk artist slog globalt igenom 2021 med 'Levitating' — mest streamad i USA det året?",
+   opts:["Charli XCX","Dua Lipa","Doja Cat","Lizzo"],c:1,
+   fun:"Levitating (2021) — Future Nostalgia vann Grammy för Bästa popalbum 2021."}
+];
+
+// ── GAME STATE ────────────────────────────────────────────
+let questions=[],qi=0,score=0,streak=0,hintUsed=false,answered=false,selectedD='all';
+
+document.querySelectorAll('.dtag').forEach(b=>{
+  b.onclick=()=>{document.querySelectorAll('.dtag').forEach(x=>x.classList.remove('active'));b.classList.add('active');selectedD=b.dataset.d;};
+});
+document.getElementById('startBtn').onclick=startQuiz;
+
+function startQuiz(){
+  let pool=[...DB];
+  if(selectedD!=='all'){
+    const map={'80s':'80-TAL','90s':'90-TAL','00s':'00-TAL','10s':'10-TAL','20s':'20-TAL'};
+    pool=pool.filter(q=>q.d===map[selectedD]);
+    if(pool.length<4) pool=[...DB];
+  }
+  pool=pool.sort(()=>Math.random()-.5).slice(0,Math.min(10,pool.length));
+  questions=pool;qi=0;score=0;streak=0;
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('quizArea').classList.add('show');
+  loadQ();
+}
+
+async function loadQ(){
+  if(qi>=questions.length){showEnd();return;}
+  stopAudio();
+  const q=questions[qi];
+  answered=false;hintUsed=false;
+  document.getElementById('decadeBadge').textContent=q.d;
+  document.getElementById('qNum').textContent=`FRÅGA ${String(qi+1).padStart(2,'0')}`;
+  document.getElementById('qText').textContent=q.q;
+  document.getElementById('qCounter').textContent=`${qi+1}/${questions.length}`;
+  document.getElementById('scoreDisplay').textContent=score;
+  document.getElementById('progressFill').style.width=`${(qi/questions.length)*100}%`;
+  document.getElementById('streakDisplay').textContent=streak;
+  document.getElementById('spFill').style.width='0%';
+  document.getElementById('spTime').textContent='0:30';
+  document.getElementById('songReveal').className='song-reveal';
+  const hb=document.getElementById('hintBtn');
+  hb.textContent='📅 VISA ÅRTIPS (−1 poäng)';
+  hb.classList.remove('used');hb.disabled=false;
+  const grid=document.getElementById('optsGrid');
+  grid.innerHTML='';
+  ['A','B','C','D'].forEach((L,i)=>{
+    const btn=document.createElement('button');
+    btn.className='opt';
+    btn.innerHTML=`<span class="ol">${L}</span>${q.opts[i]}`;
+    btn.onclick=()=>answer(i);
+    grid.appendChild(btn);
+  });
+  document.getElementById('feedback').className='fb';
+  document.getElementById('nextBtn').className='next-btn';
+  // Load preview
+  setPlayer('loading');
+  previewUrl=null;
+  const url=await getPreview(q.id);
+  if(url){previewUrl=url;setPlayer('ready');}
+  else setPlayer('error');
+}
+
+function answer(idx){
+  if(answered)return;
+  answered=true;
+  stopAudio();
+  const q=questions[qi];
+  const btns=document.querySelectorAll('.opt');
+  const fb=document.getElementById('feedback');
+  btns.forEach(b=>b.disabled=true);
+  // Reveal
+  document.getElementById('revealTitle').textContent=q.title;
+  document.getElementById('revealArtist').textContent=`${q.artist} · ${q.y}`;
+  document.getElementById('songReveal').className='song-reveal show';
+  if(idx===q.c){
+    btns[idx].classList.add('correct');
+    let pts=hintUsed?0:1;
+    if(streak>=2&&!hintUsed)pts=2;
+    score+=pts;streak++;
+    fb.className='fb ok show';
+    if(pts===2)fb.innerHTML=`✅ RÄTT! +2 POÄNG — STREAK ×${streak} 🔥<br><small>${q.fun}</small>`;
+    else if(hintUsed)fb.innerHTML=`✅ RÄTT — inga poäng (årstips)<br><small>${q.fun}</small>`;
+    else fb.innerHTML=`✅ RÄTT! +1 POÄNG<br><small>${q.fun}</small>`;
+    spawnConfetti();
+  } else {
+    btns[idx].classList.add('wrong');
+    btns[q.c].classList.add('correct');
+    streak=0;
+    fb.className='fb no show';
+    fb.innerHTML=`❌ FEL — Rätt: <strong>${q.opts[q.c]}</strong><br><small>${q.fun}</small>`;
+  }
+  document.getElementById('scoreDisplay').textContent=score;
+  document.getElementById('streakDisplay').textContent=streak;
+  const nb=document.getElementById('nextBtn');
+  nb.className='next-btn show';
+  nb.textContent=qi+1>=questions.length?'SE RESULTAT →':'NÄSTA FRÅGA →';
+}
+
+function nextQ(){qi++;loadQ();}
+
+function showHint(){
+  if(answered||hintUsed)return;
+  const q=questions[qi];
+  const b=document.getElementById('hintBtn');
+  b.textContent=`📅 ÅR: ${q.y} (−1 poäng om rätt)`;
+  b.classList.add('used');b.disabled=true;hintUsed=true;
+}
+
+function showEnd(){
+  stopAudio();
+  document.getElementById('quizArea').classList.remove('show');
+  const end=document.getElementById('endScreen');
+  end.classList.add('show');
+  const max=questions.length*2;
+  document.getElementById('endSub').textContent=`Du fick ${score} poäng av max ${max}`;
+  const pct=score/max;
+  let rank;
+  if(pct>=.9)rank='🏆 MUSIKLEGEND';
+  else if(pct>=.75)rank='🎵 MUSIKÄLSKARE';
+  else if(pct>=.55)rank='🎸 MUSIKENTUSIAST';
+  else if(pct>=.35)rank='🎤 HITSTER-NOVIS';
+  else rank='🎶 ÖRONORM';
+  document.getElementById('rankBadge').textContent=rank;
+  for(let i=0;i<60;i++)setTimeout(spawnConfetti,i*40);
+}
+
+function restart(){
+  stopAudio();
+  document.getElementById('endScreen').classList.remove('show');
+  document.getElementById('intro').classList.remove('hidden');
+  score=0;streak=0;qi=0;
+}
+
+function spawnConfetti(){
+  const cols=['#FFE600','#FF2D78','#00E5FF','#00FF88','#fff','#1DB954'];
+  const c=document.createElement('div');
+  c.className='cp';
+  c.style.cssText=`left:${Math.random()*100}vw;top:-10px;background:${cols[Math.random()*cols.length|0]};border-radius:${Math.random()>.5?'50%':'0'};animation-duration:${1.1+Math.random()*.9}s;animation-delay:${Math.random()*.5}s;`;
+  document.body.appendChild(c);
+  setTimeout(()=>c.remove(),2200);
+}
+
+// ── INIT ──────────────────────────────────────────────────
+async function init(){
+  // Redan inloggad?
+  if(checkStoredToken()){
+    await afterLogin();
+    return;
+  }
+  // Kom vi tillbaka från Spotify redirect (fallback)?
+  await checkRedirectCallback();
+}
+
+init();
+</script>
+</body>
+</html>
